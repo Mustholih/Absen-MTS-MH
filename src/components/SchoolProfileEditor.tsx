@@ -170,7 +170,7 @@ export default function SchoolProfileEditor({ profile, onUpdateProfile }: School
                   value={schoolName}
                   onChange={(e) => setSchoolName(e.target.value)}
                   className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 focus:bg-white focus:border-indigo-600 rounded-lg text-xs font-bold transition outline-none text-slate-700"
-                  placeholder="SMA INDONESIA MANDIRI"
+                  placeholder="MTsS MIFTAHUL HUDA"
                   required
                 />
               </div>
@@ -241,7 +241,7 @@ export default function SchoolProfileEditor({ profile, onUpdateProfile }: School
                     value={signeeTitleLeft}
                     onChange={(e) => setSigneeTitleLeft(e.target.value)}
                     className="w-full px-3 py-1.5 bg-white border border-slate-200 focus:border-indigo-600 rounded text-xs font-semibold outline-none"
-                    placeholder="Kepala Sekolah SMA Indonesia Mandiri"
+                    placeholder="Kepala Sekolah MTsS MIFTAHUL HUDA"
                     required
                   />
                 </div>

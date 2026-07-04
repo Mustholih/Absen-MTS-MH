@@ -128,13 +128,13 @@ export default function DashboardOverview({ teachers, records, onNavigate, selec
     });
   }, [teachers, records]);
 
-  // 3. Get alerts (teachers who are absent or late today)
+  // 3. Get alerts (teachers who are absent today)
   const alertsToday = useMemo(() => {
     const activeTeachers = teachers.filter(t => t.status === 'aktif');
     const recordsToday = records.filter(r => r.date === selectedDate);
     
     return recordsToday
-      .filter(r => r.status === 'alpa' || r.status === 'terlambat')
+      .filter(r => r.status === 'alpa')
       .map(r => {
         const teacher = activeTeachers.find(t => t.id === r.teacherId);
         return {
@@ -208,7 +208,7 @@ export default function DashboardOverview({ teachers, records, onNavigate, selec
       </div>
 
       {/* Grid Summary Cards - Styled with pure bold colors and clean borders */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4" id="stats-grid">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4" id="stats-grid">
         {/* Total Teachers Card */}
         <div className="bg-white p-5 rounded-2xl border border-slate-200 flex flex-col justify-between" id="stat-card-total">
           <div className="flex items-center justify-between">
@@ -243,29 +243,17 @@ export default function DashboardOverview({ teachers, records, onNavigate, selec
         {/* Hadir/Tepat Waktu Card */}
         <div className="bg-emerald-500 p-5 rounded-2xl flex flex-col justify-between text-white" id="stat-card-hadir">
           <div className="flex items-center justify-between">
-            <span className="text-[10px] font-bold text-emerald-100 tracking-wider uppercase">Tepat Waktu</span>
+            <span className="text-[10px] font-bold text-emerald-100 tracking-wider uppercase">Hadir</span>
             <span className="text-white"><CheckCircle className="w-4 h-4" /></span>
           </div>
           <div className="mt-4">
             <h3 className="text-3xl font-black tracking-tight">{statsToday.hadir}</h3>
-            <p className="text-[10px] text-emerald-100 font-bold mt-1.5">Sesuai Jadwal Hari Ini</p>
-          </div>
-        </div>
-
-        {/* Terlambat Card */}
-        <div className="bg-amber-400 p-5 rounded-2xl flex flex-col justify-between text-slate-900" id="stat-card-lambat">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-bold text-amber-950/60 tracking-wider uppercase">Terlambat</span>
-            <span className="text-slate-900"><Clock className="w-4 h-4" /></span>
-          </div>
-          <div className="mt-4">
-            <h3 className="text-3xl font-black tracking-tight">{statsToday.terlambat}</h3>
-            <p className="text-[10px] text-amber-950/60 font-bold mt-1.5">Melebihi Batas Waktu</p>
+            <p className="text-[10px] text-emerald-100 font-bold mt-1.5">Guru Hadir Hari Ini</p>
           </div>
         </div>
 
         {/* Absen / Alpa Card */}
-        <div className="bg-rose-500 p-5 rounded-2xl col-span-2 lg:col-span-1 flex flex-col justify-between text-white" id="stat-card-alpa">
+        <div className="bg-rose-500 p-5 rounded-2xl col-span-2 sm:col-span-1 flex flex-col justify-between text-white" id="stat-card-alpa">
           <div className="flex items-center justify-between">
             <span className="text-[10px] font-bold text-rose-100 tracking-wider uppercase">Alpa / Absen</span>
             <span className="text-white"><AlertTriangle className="w-4 h-4" /></span>

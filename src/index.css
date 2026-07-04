@@ -79,3 +79,11 @@
   animation: slideRight 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
+/* Webcam element fixes for html5-qrcode */
+#webcam-preview-container video {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+  border-radius: 1rem !important;
+}
+

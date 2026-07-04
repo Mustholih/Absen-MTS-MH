@@ -38,8 +38,14 @@ export default function App() {
   // Navigation active tab
   const [activeTab, setActiveTab] = useState<string>('dashboard');
   
-  // Date state (for attendance logging), defaulted to current metadata date (July 3, 2026)
-  const [selectedDate, setSelectedDate] = useState<string>('2026-07-03');
+  // Date state (for attendance logging), dynamically defaulted to the current system date
+  const [selectedDate, setSelectedDate] = useState<string>(() => {
+    const d = new Date();
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  });
 
   // Core Data States
   const [teachers, setTeachers] = useState<Teacher[]>([]);
@@ -75,6 +81,13 @@ export default function App() {
 
   // Load or seed initial data from localStorage
   useEffect(() => {
+    // Clear old seeded demo data once to ensure a clean start
+    if (localStorage.getItem('v3_fresh_start_cleared') !== 'true') {
+      localStorage.removeItem('teachers_data');
+      localStorage.removeItem('attendance_records_data');
+      localStorage.setItem('v3_fresh_start_cleared', 'true');
+    }
+
     const storedTeachers = localStorage.getItem('teachers_data');
     const storedRecords = localStorage.getItem('attendance_records_data');
 
@@ -410,16 +423,6 @@ export default function App() {
           >
             Keluar dari Sistem
           </button>
-          
-          <button
-            id="btn-reset-db"
-            onClick={handleResetDatabase}
-            className="w-full py-2 bg-slate-50 hover:bg-slate-100 text-slate-500 rounded-lg text-[10px] font-bold transition flex items-center justify-center gap-1.5 border border-slate-200 cursor-pointer"
-            title="Setel ulang data default untuk draf"
-          >
-            <Database className="w-3.5 h-3.5 text-slate-400" />
-            Setel Ulang Demo Data
-          </button>
         </div>
       </aside>
 
@@ -532,14 +535,6 @@ export default function App() {
                 className="w-full py-2 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-lg text-[10px] font-bold transition flex items-center justify-center gap-1 border border-rose-100 cursor-pointer"
               >
                 Keluar dari Sistem
-              </button>
-
-              <button
-                onClick={() => { handleResetDatabase(); setIsMobileMenuOpen(false); }}
-                className="w-full py-2 bg-slate-50 hover:bg-slate-100 text-slate-500 rounded-lg text-[10px] font-bold transition flex items-center justify-center gap-1 border border-slate-200 cursor-pointer"
-              >
-                <Database className="w-3 h-3 text-slate-400" />
-                Setel Ulang Demo Data
               </button>
             </div>
           </div>

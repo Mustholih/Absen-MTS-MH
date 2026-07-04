@@ -43,7 +43,7 @@ const INDONESIAN_MONTHS = [
 ];
 
 export default function MonthlyReport({ teachers, records }: MonthlyReportProps) {
-  const currentDate = new Date('2026-07-03');
+  const currentDate = new Date();
   const [selectedMonth, setSelectedMonth] = useState('06'); // Default to June 2026 since we have rich seeded data there
   const [selectedYear, setSelectedYear] = useState('2026');
   const [selectedTeacherId, setSelectedTeacherId] = useState<string>('all');
@@ -66,13 +66,13 @@ export default function MonthlyReport({ teachers, records }: MonthlyReportProps)
     }
   }, [isPrintModalOpen]); // Reload whenever the print modal opens
 
-  const schoolName = schoolProfile?.schoolName || 'SMA INDONESIA MANDIRI';
-  const schoolAddress = schoolProfile?.address || 'Jl. Pendidikan Raya No. 45, Jakarta Pusat, DKI Jakarta';
-  const schoolPhone = schoolProfile?.phone || '(021) 555-0199';
-  const schoolEmail = schoolProfile?.email || 'info@smaindonesiamandiri.sch.id';
-  const schoolNpsn = schoolProfile?.npsn || '10293847';
-  const schoolPrincipal = schoolProfile?.principalName || 'Dr. H. Mulyadi, M.Si.';
-  const schoolPrincipalNip = schoolProfile?.principalNip || '196812241994031002';
+  const schoolName = schoolProfile?.schoolName || 'MTsS MIFTAHUL HUDA';
+  const schoolAddress = schoolProfile?.address || 'JL. TUMBRO RAYA DESA RAWA JAYA KEC. TABIR SELATAN KAB. MERANGIN KODE POS 37354';
+  const schoolPhone = schoolProfile?.phone || '+62 | 81366866292';
+  const schoolEmail = schoolProfile?.email || 'miftahulhuda97@gmail.com';
+  const schoolNpsn = schoolProfile?.npsn || '10508256';
+  const schoolPrincipal = schoolProfile?.principalName || 'SLAMET, S.Pd., M.H.';
+  const schoolPrincipalNip = schoolProfile?.principalNip || '197206052003121005';
   const schoolSignature = schoolProfile?.signatureImage || ''; // base64 data URL
 
   // Filter out active teachers for the report
@@ -206,38 +206,26 @@ export default function MonthlyReport({ teachers, records }: MonthlyReportProps)
 
   // Helper to get signee location dynamically
   const getSigneeLocation = () => {
-    const address = schoolProfile?.address || '';
-    if (address.toUpperCase().includes('TABIR SELATAN')) {
-      return 'Tabir Selatan';
-    }
-    if (address.toUpperCase().includes('RAWA JAYA')) {
-      return 'Rawa Jaya';
-    }
-    const parts = address.split(/KEC\.|DESA|KAB\./i);
-    if (parts.length > 1) {
-      return parts[1].trim().split(',')[0].trim();
-    }
-    return 'Tabir Selatan';
+    return 'Rawa Jaya';
   };
 
   // Helper: Export data to formal CSV (compatible with Excel)
   const handleExportCSV = () => {
     const monthName = INDONESIAN_MONTHS.find(m => m.value === selectedMonth)?.name || selectedMonth;
     
-    // Header columns in Indonesian
+    // Header columns in Indonesian - Aligning columns perfectly
     const csvContent = [
-      ['LAPORAN REKAPITULASI ABSENSI GURU BULANAN', '', '', '', '', '', '', ''],
-      [`Bulan: ${monthName} ${selectedYear}`, '', '', '', '', '', '', ''],
-      ['Sekolah: AI Studio Academy', '', '', '', '', '', '', ''],
+      ['LAPORAN REKAPITULASI ABSENSI GURU BULANAN', '', '', '', '', '', '', '', '', ''],
+      [`Bulan: ${monthName} ${selectedYear}`, '', '', '', '', '', '', '', '', ''],
+      [`Madrasah: ${schoolName}`, '', '', '', '', '', '', '', '', ''],
       [],
-      ['No', 'Nama Guru', 'NIP', 'Mata Pelajaran', 'Hadir', 'Terlambat', 'Izin', 'Sakit', 'Alpa', 'Total Hari Kerja', 'Persentase Kehadiran (%)'],
+      ['No', 'Nama Guru', 'NIP', 'Mata Pelajaran', 'Hadir', 'Izin', 'Sakit', 'Alpa', 'Total Hari Kerja', 'Persentase Kehadiran (%)'],
       ...filteredStats.map((s, index) => [
         index + 1,
         s.teacherName,
-        `="${s.nip}"`, // Excel formulation to preserve leading zeros in NIP
+        s.nip ? `="${s.nip}"` : '-', // Excel formulation to preserve leading zeros in NIP
         s.subject,
         s.hadir,
-        s.terlambat,
         s.izin,
         s.sakit,
         s.alpa,
@@ -246,14 +234,19 @@ export default function MonthlyReport({ teachers, records }: MonthlyReportProps)
       ])
     ];
 
-    // Build standard CSV formatting with safe Excel character set UTF-8 with BOM
-    const csvString = '\uFEFF' + csvContent.map(row => row.map(cell => {
+    // Build standard CSV formatting with sep=; directive for perfect Excel parsing
+    // and safe Excel character set UTF-8 with BOM (\uFEFF)
+    const sepDirective = 'sep=;\n';
+    const csvBody = csvContent.map(row => row.map(cell => {
       const stringCell = cell !== undefined ? String(cell) : '';
-      if (stringCell.includes(',') || stringCell.includes('\n') || stringCell.includes('"')) {
+      // Escape cell if it contains semicolon, comma, newline or double-quote
+      if (stringCell.includes(';') || stringCell.includes(',') || stringCell.includes('\n') || stringCell.includes('"')) {
         return `"${stringCell.replace(/"/g, '""')}"`;
       }
       return stringCell;
-    }).join(',')).join('\n');
+    }).join(';')).join('\n');
+
+    const csvString = '\uFEFF' + sepDirective + csvBody;
 
     // Create anchor link and download automatically
     const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
@@ -367,7 +360,7 @@ export default function MonthlyReport({ teachers, records }: MonthlyReportProps)
       </div>
 
       {/* Mini Overview Row */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4" id="monthly-mini-stats">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4" id="monthly-mini-stats">
         {/* Attendance Rate */}
         <div className="bg-white p-4 rounded-2xl border border-slate-200 flex items-center gap-3">
           <div className="w-10 h-10 bg-emerald-50 text-emerald-600 rounded-lg border border-emerald-200 flex items-center justify-center shrink-0">
@@ -379,22 +372,11 @@ export default function MonthlyReport({ teachers, records }: MonthlyReportProps)
           </div>
         </div>
 
-        {/* Lateness frequency */}
-        <div className="bg-white p-4 rounded-2xl border border-slate-200 flex items-center gap-3">
-          <div className="w-10 h-10 bg-amber-50 text-amber-500 rounded-lg border border-amber-200 flex items-center justify-center shrink-0">
-            <Clock className="w-5 h-5" />
-          </div>
-          <div>
-            <span className="text-[10px] font-bold text-slate-400 uppercase">Rasio Keterlambatan</span>
-            <span className="text-xl font-extrabold text-slate-800 block mt-0.5">{schoolAverage.lateRate}%</span>
-          </div>
-        </div>
-
         {/* Help Tip */}
         <div className="bg-indigo-50/45 border border-indigo-200 p-4 rounded-2xl flex items-center gap-3">
           <Info className="w-5 h-5 text-indigo-500 shrink-0" />
           <div className="text-[11px] text-indigo-800 font-medium">
-            <strong>Catatan Formula:</strong> Persentase kehadiran dihitung berdasarkan <code>(Hadir + Terlambat) / (Hadir + Terlambat + Alpa)</code>. Izin &amp; Sakit tidak dihitung sebagai pelanggaran.
+            <strong>Catatan Formula:</strong> Persentase kehadiran dihitung berdasarkan <code>Hadir / (Hadir + Alpa)</code>. Izin, Sakit, &amp; Libur tidak dihitung sebagai pelanggaran.
           </div>
         </div>
       </div>
@@ -429,7 +411,6 @@ export default function MonthlyReport({ teachers, records }: MonthlyReportProps)
                     <tr className="border-b border-slate-200 bg-slate-50 text-slate-400 text-[10px] font-bold uppercase tracking-wider">
                       <th className="px-6 py-4">Nama Guru / NIP</th>
                       <th className="px-4 py-4 text-center">Hadir</th>
-                      <th className="px-4 py-4 text-center">Terlambat</th>
                       <th className="px-4 py-4 text-center">Izin</th>
                       <th className="px-4 py-4 text-center">Sakit</th>
                       <th className="px-4 py-4 text-center">Alpa</th>
@@ -448,11 +429,6 @@ export default function MonthlyReport({ teachers, records }: MonthlyReportProps)
                           </div>
                         </td>
                         <td className="px-4 py-4 text-center text-slate-700 font-bold">{stat.hadir}</td>
-                        <td className="px-4 py-4 text-center">
-                          <span className={stat.terlambat > 0 ? 'text-amber-600 font-bold' : 'text-slate-400'}>
-                            {stat.terlambat}
-                          </span>
-                        </td>
                         <td className="px-4 py-4 text-center text-slate-600">{stat.izin}</td>
                         <td className="px-4 py-4 text-center text-slate-600">{stat.sakit}</td>
                         <td className="px-4 py-4 text-center">
@@ -565,8 +541,8 @@ export default function MonthlyReport({ teachers, records }: MonthlyReportProps)
                         badgeClass = 'bg-emerald-50 text-emerald-700 border-emerald-200';
                         statusLabel = 'Hadir Tepat Waktu';
                       } else if (record.status === 'terlambat') {
-                        badgeClass = 'bg-amber-50 text-amber-700 border-amber-200';
-                        statusLabel = 'Terlambat';
+                        badgeClass = 'bg-emerald-50 text-emerald-700 border-emerald-200';
+                        statusLabel = 'Hadir';
                       } else if (record.status === 'izin') {
                         badgeClass = 'bg-blue-50 text-blue-700 border-blue-200';
                         statusLabel = 'Izin Resmi';
@@ -718,7 +694,7 @@ export default function MonthlyReport({ teachers, records }: MonthlyReportProps)
                       <span className="text-xs font-mono font-bold text-slate-900">{selectedTeacherStats.nip}</span>
                     </div>
                     <div>
-                      <span className="text-slate-400 text-[10px] uppercase font-bold block">Tingkat Kehadiran Mandiri</span>
+                      <span className="text-slate-400 text-[10px] uppercase font-bold block">Tingkat Kehadiran</span>
                       <span className="text-xs font-bold text-indigo-600 font-mono">{selectedTeacherStats.attendanceRate}%</span>
                     </div>
                     <div className="col-span-2 grid grid-cols-6 gap-2 border-t border-slate-200 pt-2 mt-1 text-center">
@@ -762,12 +738,11 @@ export default function MonthlyReport({ teachers, records }: MonthlyReportProps)
                       <th className="border border-slate-300 px-3 py-2">NIP</th>
                       <th className="border border-slate-300 px-3 py-2">Mata Pelajaran</th>
                       <th className="border border-slate-300 px-2 py-2 text-center">H</th>
-                      <th className="border border-slate-300 px-2 py-2 text-center">T</th>
                       <th className="border border-slate-300 px-2 py-2 text-center">I</th>
                       <th className="border border-slate-300 px-2 py-2 text-center">S</th>
                       <th className="border border-slate-300 px-2 py-2 text-center">A</th>
                       <th className="border border-slate-300 px-2 py-2 text-center">L</th>
-                      <th className="border border-slate-300 px-3 py-2 text-right">Rasio Hadir</th>
+                      <th className="border border-slate-300 px-3 py-2 text-center" style={{ width: '130px' }}>Tanda Tangan</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-300 text-slate-800">
@@ -778,12 +753,21 @@ export default function MonthlyReport({ teachers, records }: MonthlyReportProps)
                         <td className="border border-slate-300 px-3 py-1.5 font-mono">{stat.nip}</td>
                         <td className="border border-slate-300 px-3 py-1.5">{stat.subject}</td>
                         <td className="border border-slate-300 px-2 py-1.5 text-center font-mono">{stat.hadir}</td>
-                        <td className="border border-slate-300 px-2 py-1.5 text-center font-mono text-amber-700 font-semibold">{stat.terlambat}</td>
                         <td className="border border-slate-300 px-2 py-1.5 text-center font-mono">{stat.izin}</td>
                         <td className="border border-slate-300 px-2 py-1.5 text-center font-mono">{stat.sakit}</td>
                         <td className="border border-slate-300 px-2 py-1.5 text-center font-mono text-rose-700 font-bold bg-rose-50/20">{stat.alpa}</td>
                         <td className="border border-slate-300 px-2 py-1.5 text-center font-mono text-violet-700 font-bold bg-violet-50/10">{stat.libur}</td>
-                        <td className="border border-slate-300 px-3 py-1.5 text-right font-bold text-slate-900 font-mono">{stat.attendanceRate}%</td>
+                        <td className="border border-slate-300 px-3 py-1 text-left font-mono">
+                          {index % 2 === 0 ? (
+                            <div className="pl-1 text-[10px] text-slate-800 font-medium">
+                              {index + 1}. ...........................
+                            </div>
+                          ) : (
+                            <div className="pl-12 text-[10px] text-slate-800 font-medium">
+                              {index + 1}. ...........................
+                            </div>
+                          )}
+                        </td>
                       </tr>
                     ))}
                   </tbody>

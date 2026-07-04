@@ -5,6 +5,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import QRCode from 'qrcode';
+import { Html5Qrcode } from 'html5-qrcode';
 import { Teacher, AttendanceRecord, AttendanceStatus } from '../types';
 import { Camera, QrCode, CheckCircle, Clock, Volume2, VolumeX, ShieldAlert, Sparkles, User, RefreshCw } from 'lucide-react';
 
@@ -27,6 +28,139 @@ export default function QrAttendanceScanner({ teachers, records, onSaveRecord, s
   
   // Timer ref for auto-clearing scan screens
   const clearTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const [useWebcam, setUseWebcam] = useState<boolean>(true);
+  const [webcamStatus, setWebcamStatus] = useState<'off' | 'on' | 'loading' | 'error'>('off');
+  const [webcamError, setWebcamError] = useState<string>('');
+  const [cameras, setCameras] = useState<Array<{ id: string; label: string }>>([]);
+  const [selectedCameraId, setSelectedCameraId] = useState<string>('');
+  const scannerRef = useRef<Html5Qrcode | null>(null);
+
+  const startScanner = async () => {
+    setWebcamStatus('loading');
+    setWebcamError('');
+    try {
+      if (scannerRef.current) {
+        try {
+          await scannerRef.current.stop();
+        } catch (e) {
+          // ignore
+        }
+        scannerRef.current = null;
+      }
+
+      // Check if container element exists before constructing scanner
+      const container = document.getElementById("webcam-preview-container");
+      if (!container) {
+        console.warn("Container webcam-preview-container tidak ditemukan");
+        setWebcamStatus('off');
+        return;
+      }
+
+      const html5QrCode = new Html5Qrcode("webcam-preview-container");
+      scannerRef.current = html5QrCode;
+
+      // Choose config or exact device ID
+      const cameraConfig = selectedCameraId ? selectedCameraId : { facingMode: "user" };
+
+      await html5QrCode.start(
+        cameraConfig,
+        {
+          fps: 15,
+          qrbox: (width, height) => {
+            const size = Math.min(width, height) * 0.75;
+            return { width: size, height: size };
+          }
+        },
+        (decodedText) => {
+          handleProcessScannedText(decodedText);
+        },
+        (errorMessage) => {
+          // Silent failure on scanning frame errors is expected
+        }
+      );
+      setWebcamStatus('on');
+    } catch (err: any) {
+      console.error("Gagal memulai kamera:", err);
+      setWebcamStatus('error');
+      setWebcamError(err?.message || 'Izin kamera ditolak atau kamera sedang digunakan oleh aplikasi lain.');
+    }
+  };
+
+  const stopScanner = async () => {
+    if (scannerRef.current) {
+      try {
+        if (scannerRef.current.isScanning) {
+          await scannerRef.current.stop();
+        }
+      } catch (err) {
+        console.error("Gagal menghentikan kamera:", err);
+      }
+      scannerRef.current = null;
+    }
+    setWebcamStatus('off');
+  };
+
+  const handleProcessScannedText = (text: string) => {
+    // If we're already showing a result/error, ignore any scans
+    if (scannedTeacher || errorMsg) return;
+
+    let foundTeacher: Teacher | null = null;
+    let targetId = '';
+
+    try {
+      const data = JSON.parse(text);
+      if (data && data.id) {
+        targetId = data.id;
+      } else {
+        targetId = text.trim();
+      }
+    } catch {
+      targetId = text.trim();
+    }
+
+    foundTeacher = teachers.find(t => t.id === targetId || t.nip === targetId || t.name.toLowerCase() === targetId.toLowerCase()) || null;
+
+    if (foundTeacher) {
+      // Simulate scan process
+      handleSimulateScan(foundTeacher.id);
+    } else {
+      setErrorMsg(`QR Code tidak terdaftar: "${text.substring(0, 30)}"`);
+      playBeep('error');
+    }
+  };
+
+  // Fetch available cameras when webcam is turned on
+  useEffect(() => {
+    if (useWebcam) {
+      Html5Qrcode.getCameras()
+        .then(devices => {
+          if (devices && devices.length > 0) {
+            setCameras(devices);
+            setSelectedCameraId(prev => prev || devices[0].id);
+          }
+        })
+        .catch(err => {
+          console.warn("Gagal mendapatkan daftar kamera:", err);
+        });
+    }
+  }, [useWebcam]);
+
+  // Start scanner on camera or webcam change
+  useEffect(() => {
+    if (useWebcam) {
+      // Small timeout to let DOM render #webcam-preview-container
+      const t = setTimeout(() => {
+        startScanner();
+      }, 300);
+      return () => {
+        clearTimeout(t);
+        stopScanner();
+      };
+    } else {
+      stopScanner();
+    }
+  }, [useWebcam, selectedCameraId]);
 
   // Synthesize terminal beep sound using Web Audio API (completely offline & local)
   const playBeep = (type: 'success' | 'error') => {
@@ -104,25 +238,16 @@ export default function QrAttendanceScanner({ teachers, records, onSaveRecord, s
     const minsStr = String(now.getMinutes()).padStart(2, '0');
     const timeOfScan = `${hoursStr}:${minsStr}`;
 
-    // Decide if late or not (limit 07:15 is normal, above 07:15 is late)
-    let status: AttendanceStatus = customStatus || 'hadir';
+    // Status is always "hadir" because school does not use lateness tracking due to flexible teacher hours
+    let status: AttendanceStatus = 'hadir';
     let checkInTime = timeOfScan;
-    
-    if (!customStatus) {
-      const currentMinutes = now.getHours() * 60 + now.getMinutes();
-      const limitMinutes = 7 * 60 + 15; // 07:15 AM
-      if (currentMinutes > limitMinutes) {
-        status = 'terlambat';
-      }
-    }
 
     // Save record via parent state
     onSaveRecord({
       teacherId: teacher.id,
       date: selectedDate,
       status,
-      checkInTime: (status === 'hadir' || status === 'terlambat') ? checkInTime : undefined,
-      notes: status === 'terlambat' ? 'Presensi otomatis via QR Terminal lobby' : undefined
+      checkInTime: checkInTime
     });
 
     // Display scanned state
@@ -130,11 +255,7 @@ export default function QrAttendanceScanner({ teachers, records, onSaveRecord, s
     setScanResult({
       status,
       time: checkInTime,
-      msg: status === 'hadir' 
-        ? 'PRESENSI BERHASIL - TEPAT WAKTU' 
-        : status === 'terlambat' 
-        ? 'PRESENSI BERHASIL - TERLAMBAT' 
-        : `PRESENSI TERCATAT SEBAGAI ${status.toUpperCase()}`
+      msg: 'PRESENSI BERHASIL'
     });
 
     playBeep('success');
@@ -213,6 +334,32 @@ export default function QrAttendanceScanner({ teachers, records, onSaveRecord, s
             TANGGAL: {selectedDate}
           </div>
 
+          {/* Real-time Camera vs Simulation Mode Selector */}
+          <div className="mt-4 flex gap-2 bg-slate-950 p-1 rounded-xl border border-slate-800 z-10 shrink-0">
+            <button
+              type="button"
+              onClick={() => setUseWebcam(true)}
+              className={`flex-1 py-1.5 rounded-lg text-[10px] font-extrabold uppercase tracking-wider transition cursor-pointer ${
+                useWebcam 
+                  ? 'bg-indigo-600 text-white shadow-sm' 
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              Kamera Aktif (Webcam)
+            </button>
+            <button
+              type="button"
+              onClick={() => setUseWebcam(false)}
+              className={`flex-1 py-1.5 rounded-lg text-[10px] font-extrabold uppercase tracking-wider transition cursor-pointer ${
+                !useWebcam 
+                  ? 'bg-indigo-600 text-white shadow-sm' 
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              Simulasi Offline (Tanpa Kamera)
+            </button>
+          </div>
+
           {/* Scanner Middle Display Frame */}
           <div className="my-8 flex-1 flex flex-col items-center justify-center relative">
             {scannedTeacher && scanResult ? (
@@ -276,19 +423,92 @@ export default function QrAttendanceScanner({ teachers, records, onSaveRecord, s
                   Ulangi Pemindaian
                 </button>
               </div>
+            ) : useWebcam ? (
+              /* Real Live Webcam Active Scanner */
+              <div className="text-center space-y-6 w-full max-w-sm">
+                <div className="relative w-64 h-64 mx-auto rounded-2xl border-2 border-indigo-500/40 overflow-hidden bg-slate-950 flex items-center justify-center">
+                  {/* Real-time webcam reader container */}
+                  <div id="webcam-preview-container" className="w-full h-full object-cover rounded-2xl"></div>
+                  
+                  {/* Laser Scanning Guide Overlay */}
+                  {webcamStatus === 'on' && (
+                    <div className="absolute inset-0 pointer-events-none flex flex-col justify-between p-4 z-10">
+                      {/* Scan corners */}
+                      <div className="flex justify-between">
+                        <div className="w-4 h-4 border-t-2 border-l-2 border-indigo-400"></div>
+                        <div className="w-4 h-4 border-t-2 border-r-2 border-indigo-400"></div>
+                      </div>
+                      
+                      {/* Scanning laser line */}
+                      <div className="w-full h-0.5 bg-indigo-500 opacity-80 animate-scan-line shadow-[0_0_10px_#4f46e5] self-center"></div>
+                      
+                      <div className="flex justify-between">
+                        <div className="w-4 h-4 border-b-2 border-l-2 border-indigo-400"></div>
+                        <div className="w-4 h-4 border-b-2 border-r-2 border-indigo-400"></div>
+                      </div>
+                    </div>
+                  )}
+
+                  {webcamStatus === 'loading' && (
+                    <div className="absolute inset-0 bg-slate-950/90 flex flex-col items-center justify-center gap-3 text-slate-400 z-20">
+                      <RefreshCw className="w-8 h-8 text-indigo-500 animate-spin" />
+                      <span className="text-[10px] font-mono tracking-wider font-bold">MENGHUBUNGKAN KAMERA...</span>
+                    </div>
+                  )}
+
+                  {webcamStatus === 'error' && (
+                    <div className="absolute inset-0 bg-slate-950/95 flex flex-col items-center justify-center p-4 text-center gap-2 text-rose-400 z-30">
+                      <ShieldAlert className="w-8 h-8 text-rose-500 animate-pulse" />
+                      <span className="text-[10px] font-mono font-bold uppercase">KAMERA TIDAK AKTIF</span>
+                      <p className="text-[9px] text-slate-400 max-w-[200px] leading-tight mt-1">{webcamError}</p>
+                      <button
+                        type="button"
+                        onClick={startScanner}
+                        className="mt-3 px-3 py-1 bg-indigo-600 hover:bg-indigo-700 text-white font-mono text-[9px] font-bold rounded uppercase tracking-wider cursor-pointer"
+                      >
+                        Coba Lagi
+                      </button>
+                    </div>
+                  )}
+                </div>
+                
+                <div>
+                  <h4 className="text-sm font-bold text-slate-300 tracking-wide uppercase">KAMERA WEBCAM AKTIF</h4>
+                  <p className="text-xs text-slate-500 mt-1">Arahkan QR Code Kartu Guru Anda ke depan kamera untuk presensi langsung.</p>
+                  
+                  {cameras.length > 0 && (
+                    <div className="mt-4 text-left max-w-[240px] mx-auto bg-slate-900/50 p-2.5 rounded-xl border border-slate-800/80">
+                      <label className="block text-[8px] font-mono font-black text-indigo-400 uppercase tracking-widest mb-1.5 text-center">
+                        PILIH SUMBER WEBCAM
+                      </label>
+                      <select
+                        value={selectedCameraId}
+                        onChange={(e) => setSelectedCameraId(e.target.value)}
+                        className="w-full px-2 py-1 bg-slate-950 border border-slate-800 rounded-lg text-[10px] font-semibold text-slate-300 outline-none focus:border-indigo-500 cursor-pointer text-center"
+                      >
+                        {cameras.map((camera) => (
+                          <option key={camera.id} value={camera.id}>
+                            {camera.label || `Kamera ${camera.id}`}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                </div>
+              </div>
             ) : (
-              /* Standby Scanner Mode Frame */
+              /* Standby Scanner Mode Frame (Simulation) */
               <div className="text-center space-y-6 w-full max-w-sm">
                 {/* Aiming/Camera target laser simulation */}
                 <div className="w-52 h-52 mx-auto border-2 border-dashed border-indigo-500/40 rounded-3xl relative flex items-center justify-center overflow-hidden bg-slate-950/50">
                   <div className="absolute inset-x-0 h-0.5 bg-indigo-500 opacity-60 animate-scan-line shadow-[0_0_10px_#4f46e5]"></div>
                   <Camera className="w-12 h-12 text-indigo-500/30 animate-pulse" />
-                  <span className="absolute bottom-3 text-[9px] font-mono tracking-widest text-indigo-400/60 font-bold">KAMERA STANDBY</span>
+                  <span className="absolute bottom-3 text-[9px] font-mono tracking-widest text-indigo-400/60 font-bold">MODE SIMULASI</span>
                 </div>
                 
                 <div>
-                  <h4 className="text-sm font-bold text-slate-300 tracking-wide uppercase">HADAPKAN KARTU GURU KE SCANNER</h4>
-                  <p className="text-xs text-slate-500 mt-1">Arahkan area QR Code pada ID Card guru Anda ke lensa pemindai secara horizontal.</p>
+                  <h4 className="text-sm font-bold text-slate-300 tracking-wide uppercase">SIMULASI SCANNER OFFLINE</h4>
+                  <p className="text-xs text-slate-500 mt-1">Gunakan panel kanan untuk generate QR, klik "Simulasi Scan" atau ketik NIP di bawah.</p>
                 </div>
               </div>
             )}
@@ -322,7 +542,7 @@ export default function QrAttendanceScanner({ teachers, records, onSaveRecord, s
           <div className="bg-white p-6 rounded-2xl border border-slate-200 space-y-4" id="qr-viewer-card">
             <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-2 border-b border-slate-100 pb-3">
               <QrCode className="w-4 h-4 text-indigo-600" />
-              Generator QR Code Mandiri
+              Generator QR Code Guru
             </h3>
 
             <div className="space-y-3">
@@ -359,18 +579,12 @@ export default function QrAttendanceScanner({ teachers, records, onSaveRecord, s
                 </div>
 
                 {/* Instant Actions for the Simulator */}
-                <div className="w-full grid grid-cols-2 gap-2 pt-2">
+                <div className="w-full pt-2">
                   <button
                     onClick={() => handleSimulateScan(selectedTeacherId)}
-                    className="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-[10px] rounded-lg transition uppercase tracking-wider cursor-pointer"
+                    className="w-full px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-[10px] rounded-lg transition uppercase tracking-wider cursor-pointer"
                   >
-                    Simulasi Scan
-                  </button>
-                  <button
-                    onClick={() => handleSimulateScan(selectedTeacherId, 'terlambat')}
-                    className="px-3 py-2 bg-amber-500 hover:bg-amber-600 text-white font-bold text-[10px] rounded-lg transition uppercase tracking-wider cursor-pointer"
-                  >
-                    Simulasi Terlambat
+                    Simulasi Scan Kehadiran
                   </button>
                 </div>
               </div>
@@ -413,13 +627,11 @@ export default function QrAttendanceScanner({ teachers, records, onSaveRecord, s
                     
                     {hasAbseb ? (
                       <span className={`px-1.5 py-0.5 rounded text-[9px] font-extrabold uppercase tracking-wider border shrink-0 ${
-                        recordForToday.status === 'hadir' 
-                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
-                          : recordForToday.status === 'terlambat' 
-                          ? 'bg-amber-50 text-amber-600 border-amber-200' 
+                        recordForToday.status === 'hadir' || recordForToday.status === 'terlambat'
+                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                           : 'bg-indigo-50 text-indigo-700 border-indigo-200'
                       }`}>
-                        {recordForToday.status}
+                        {recordForToday.status === 'terlambat' ? 'hadir' : recordForToday.status}
                       </span>
                     ) : (
                       <button

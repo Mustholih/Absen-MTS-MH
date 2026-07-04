@@ -146,10 +146,6 @@ export default function TeacherManagement({ teachers, onAddTeacher, onUpdateTeac
     setFormError('');
 
     // Validation
-    if (!nip.trim()) {
-      setFormError('NIP guru wajib diisi.');
-      return;
-    }
     if (!name.trim()) {
       setFormError('Nama guru wajib diisi.');
       return;
@@ -163,13 +159,22 @@ export default function TeacherManagement({ teachers, onAddTeacher, onUpdateTeac
       return;
     }
 
-    // NIP validation: digits only or typical formats, can customize
-    if (!/^\d+$/.test(nip.replace(/\s/g, ''))) {
+    // NIP validation: digits only, only if filled
+    if (nip.trim() && !/^\d+$/.test(nip.replace(/\s/g, ''))) {
       setFormError('NIP harus berupa angka saja.');
       return;
     }
 
     if (editingTeacher) {
+      // Check duplicate NIP on edit (if changed and not empty)
+      if (nip.trim() && nip.trim() !== editingTeacher.nip) {
+        const duplicate = teachers.some(t => t.id !== editingTeacher.id && t.nip === nip.trim());
+        if (duplicate) {
+          setFormError('Guru dengan NIP tersebut sudah terdaftar.');
+          return;
+        }
+      }
+
       onUpdateTeacher({
         ...editingTeacher,
         nip: nip.trim(),
@@ -180,11 +185,13 @@ export default function TeacherManagement({ teachers, onAddTeacher, onUpdateTeac
         photo
       });
     } else {
-      // Check if NIP is duplicate
-      const duplicate = teachers.some(t => t.nip === nip.trim());
-      if (duplicate) {
-        setFormError('Guru dengan NIP tersebut sudah terdaftar.');
-        return;
+      // Check if NIP is duplicate (only if filled)
+      if (nip.trim()) {
+        const duplicate = teachers.some(t => t.nip === nip.trim());
+        if (duplicate) {
+          setFormError('Guru dengan NIP tersebut sudah terdaftar.');
+          return;
+        }
       }
 
       onAddTeacher({
@@ -333,7 +340,7 @@ export default function TeacherManagement({ teachers, onAddTeacher, onUpdateTeac
                           </div>
                         </div>
                       </td>
-                      <td className="px-6 py-4 text-slate-600 font-mono text-xs font-bold">{teacher.nip}</td>
+                      <td className="px-6 py-4 text-slate-600 font-mono text-xs font-bold">{teacher.nip || '-'}</td>
                       <td className="px-6 py-4">
                         <span className="px-2.5 py-1 bg-slate-50 text-slate-600 text-[10px] font-bold rounded-lg border border-slate-200 inline-block">
                           {teacher.subject}
@@ -432,15 +439,14 @@ export default function TeacherManagement({ teachers, onAddTeacher, onUpdateTeac
 
               {/* NIP Field */}
               <div>
-                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">NIP (Nomor Induk Pegawai)</label>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">NIP (Opsional - Kosongkan jika belum PNS/ASN)</label>
                 <input
                   id="modal-teacher-nip"
                   type="text"
-                  placeholder="Contoh: 198507302010121004"
+                  placeholder="Boleh dikosongkan jika belum PNS/ASN"
                   value={nip}
                   onChange={(e) => setNip(e.target.value)}
-                  disabled={editingTeacher !== null} // Lock NIP on edit for formal consistency
-                  className="w-full px-3 py-2 bg-slate-50 disabled:bg-slate-100 disabled:text-slate-400 border border-slate-200 focus:bg-white focus:border-indigo-600 focus:ring-1 focus:ring-indigo-600 rounded-lg text-xs font-semibold transition outline-none text-slate-700"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 focus:bg-white focus:border-indigo-600 focus:ring-1 focus:ring-indigo-600 rounded-lg text-xs font-semibold transition outline-none text-slate-700"
                 />
               </div>
 
@@ -649,12 +655,18 @@ export default function TeacherManagement({ teachers, onAddTeacher, onUpdateTeac
 
                 {/* Card Header (Formal) */}
                 <div className="flex items-center gap-2 border-b border-white/20 pb-1.5 relative z-10 shrink-0">
-                  <div className="w-6 h-6 bg-white/15 rounded flex items-center justify-center border border-white/20 shrink-0">
-                    <UserIcon className="w-3.5 h-3.5 text-indigo-300" />
+                  <div className="w-6 h-6 bg-white/15 rounded flex items-center justify-center border border-white/20 shrink-0 overflow-hidden">
+                    {schoolProfile?.logoImage ? (
+                      <img src={schoolProfile.logoImage} alt="Logo" className="w-full h-full object-contain p-0.5" />
+                    ) : schoolProfile?.logoRightImage ? (
+                      <img src={schoolProfile.logoRightImage} alt="Logo" className="w-full h-full object-contain p-0.5" />
+                    ) : (
+                      <UserIcon className="w-3.5 h-3.5 text-indigo-300" />
+                    )}
                   </div>
                   <div className="min-w-0">
                     <h4 className="text-[8px] font-black uppercase tracking-wide truncate text-indigo-100">
-                      {schoolProfile?.schoolName || 'SMA INDONESIA MANDIRI'}
+                      {schoolProfile?.schoolName || 'MTsS MIFTAHUL HUDA'}
                     </h4>
                     <span className="text-[6px] text-slate-400 font-extrabold uppercase tracking-widest block leading-none">
                       KARTU IDENTITAS GURU &amp; ABSENSI QR
@@ -691,7 +703,7 @@ export default function TeacherManagement({ teachers, onAddTeacher, onUpdateTeac
                     <div>
                       <span className="text-[5px] font-bold text-indigo-300 block leading-none uppercase tracking-wider">NIP PEGURUS:</span>
                       <span className="text-[7.5px] font-mono font-bold text-indigo-100 leading-none">
-                        {selectedTeacherForIdCard.nip}
+                        {selectedTeacherForIdCard.nip || '-'}
                       </span>
                     </div>
                     <div>
@@ -756,6 +768,15 @@ export default function TeacherManagement({ teachers, onAddTeacher, onUpdateTeac
       {/* Styled Tag injection specifically for ID Card full screen print mode */}
       <style>{`
         @media print {
+          @page {
+            size: auto;
+            margin: 0;
+          }
+          body {
+            background-color: white !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
           body * {
             visibility: hidden;
           }
@@ -763,24 +784,37 @@ export default function TeacherManagement({ teachers, onAddTeacher, onUpdateTeac
             visibility: visible;
           }
           #id-card-modal {
-            position: absolute;
-            left: 0;
-            top: 0;
-            width: 100%;
-            height: 100%;
+            position: fixed !important;
+            left: 0 !important;
+            top: 0 !important;
+            width: 100% !important;
+            height: 100% !important;
             background: white !important;
             display: flex !important;
             align-items: center !important;
             justify-content: center !important;
-            z-index: 9999;
+            z-index: 99999 !important;
+            overflow: visible !important;
           }
           #printable-id-card-area {
-            border: 1px solid #cbd5e1 !important;
+            border: 1px solid #475569 !important;
             box-shadow: none !important;
             width: 85.6mm !important;
             height: 53.98mm !important;
-            transform: scale(1.6);
-            transform-origin: center;
+            background-image: linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #0f172a 100%) !important;
+            background-color: #0f172a !important;
+            color: white !important;
+            border-radius: 12px !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            transform: scale(1.3) !important;
+            transform-origin: center !important;
+            box-sizing: border-box !important;
+          }
+          /* Ensure all child elements are adjusted correctly for color output */
+          #printable-id-card-area * {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
           }
         }
       `}</style>
