@@ -321,6 +321,8 @@ export default function App() {
     );
   }
 
+  const activeAdminUser = localStorage.getItem('admin_username') || 'MUSTHOLIH';
+
   return (
     <div className="min-h-screen bg-slate-50 flex font-sans" id="app-root">
       {/* 1. Desktop Sidebar - Styled with Geometric Balance Theme */}
@@ -439,7 +441,7 @@ export default function App() {
         <div className="p-6 border-t border-slate-200 space-y-4" id="sidebar-footer">
           <div className="bg-slate-900 rounded-xl p-4 text-white shadow-xs" id="admin-profile-badge">
             <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block mb-1">USER AKTIF</span>
-            <p className="text-xs font-bold truncate">miftahulhuda97@gmail.com</p>
+            <p className="text-xs font-bold truncate">{activeAdminUser}</p>
             <p className="text-[10px] text-indigo-300 mt-0.5">Administrator Sistem</p>
           </div>
 
@@ -554,7 +556,7 @@ export default function App() {
             <div className="space-y-4">
               <div className="bg-slate-900 rounded-xl p-4 text-white shadow-xs">
                 <p className="text-[10px] opacity-70 mb-1 font-medium">USER AKTIF</p>
-                <p className="text-xs font-bold truncate">miftahulhuda97@gmail.com</p>
+                <p className="text-xs font-bold truncate">{activeAdminUser}</p>
                 <p className="text-[10px] text-indigo-300 mt-0.5">Administrator Sistem</p>
               </div>
 

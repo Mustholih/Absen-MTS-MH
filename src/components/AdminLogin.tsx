@@ -24,9 +24,12 @@ export default function AdminLogin({ schoolProfile, onLoginSuccess }: AdminLogin
     setError('');
     setIsLoading(true);
 
+    const storedUsername = localStorage.getItem('admin_username') || 'MUSTHOLIH';
+    const storedPassword = localStorage.getItem('admin_password') || 'Miftahulhuda97@';
+
     // Simulate small latency for realistic premium interface feel
     setTimeout(() => {
-      if (username === 'MUSTHOLIH' && password === 'Miftahulhuda97@') {
+      if (username.trim() === storedUsername.trim() && password === storedPassword) {
         onLoginSuccess();
       } else {
         setError('Nama Admin atau Password salah. Harap periksa kembali.');

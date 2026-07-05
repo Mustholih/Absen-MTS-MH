@@ -5,7 +5,7 @@
 
 import React, { useState } from 'react';
 import { SchoolProfile } from '../types';
-import { Building2, User, FileText, Upload, Trash2, CheckCircle, Image as ImageIcon } from 'lucide-react';
+import { Building2, User, FileText, Upload, Trash2, CheckCircle, Image as ImageIcon, Lock, Eye, EyeOff, Shield } from 'lucide-react';
 
 interface SchoolProfileEditorProps {
   profile: SchoolProfile;
@@ -25,10 +25,10 @@ export default function SchoolProfileEditor({ profile, onUpdateProfile }: School
   const [signeeNameLeft, setSigneeNameLeft] = useState(profile.signeeNameLeft || profile.principalName || '');
   const [signeeNipLeft, setSigneeNipLeft] = useState(profile.signeeNipLeft || profile.principalNip || '');
 
-  // Signee Right (e.g., Head of Admin)
-  const [signeeTitleRight, setSigneeTitleRight] = useState(profile.signeeTitleRight || 'Kepala Tata Usaha');
-  const [signeeNameRight, setSigneeNameRight] = useState(profile.signeeNameRight || '');
-  const [signeeNipRight, setSigneeNipRight] = useState(profile.signeeNipRight || '');
+  // Administrator Account states
+  const [adminUsername, setAdminUsername] = useState(() => localStorage.getItem('admin_username') || 'MUSTHOLIH');
+  const [adminPassword, setAdminPassword] = useState(() => localStorage.getItem('admin_password') || 'Miftahulhuda97@');
+  const [showPassword, setShowPassword] = useState(false);
 
   const [signatureImage, setSignatureImage] = useState(profile.signatureImage || '');
   const [logoImage, setLogoImage] = useState(profile.logoImage || '');
@@ -98,6 +98,11 @@ export default function SchoolProfileEditor({ profile, onUpdateProfile }: School
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Save admin account credentials
+    localStorage.setItem('admin_username', adminUsername.trim());
+    localStorage.setItem('admin_password', adminPassword);
+
     const updated: SchoolProfile = {
       schoolName: schoolName.trim(),
       foundationName: foundationName.trim(),
@@ -110,16 +115,16 @@ export default function SchoolProfileEditor({ profile, onUpdateProfile }: School
       signeeTitleLeft: signeeTitleLeft.trim(),
       signeeNameLeft: signeeNameLeft.trim(),
       signeeNipLeft: signeeNipLeft.trim(),
-      signeeTitleRight: signeeTitleRight.trim(),
-      signeeNameRight: signeeNameRight.trim(),
-      signeeNipRight: signeeNipRight.trim(),
+      signeeTitleRight: '',
+      signeeNameRight: '',
+      signeeNipRight: '',
       signatureImage,
       logoImage,
       logoRightImage,
       showSignature
     };
     onUpdateProfile(updated);
-    setMessage('Perubahan berhasil disimpan!');
+    setMessage('Perubahan profil dan akun berhasil disimpan!');
     setTimeout(() => setMessage(''), 3000);
   };
 
@@ -226,14 +231,13 @@ export default function SchoolProfileEditor({ profile, onUpdateProfile }: School
           <div className="bg-white p-6 rounded-2xl border border-slate-200 space-y-4" id="section-school-signees">
             <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-2 border-b border-slate-100 pb-3">
               <User className="w-4 h-4 text-indigo-600" />
-              Struktur Penandatangan Laporan (PDF)
+              Struktur Penandatangan Laporan (Kepala Sekolah)
             </h3>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Left Signee (Principal) */}
-              <div className="space-y-3.5 p-4 bg-slate-50/50 rounded-xl border border-slate-200">
-                <span className="text-[10px] font-bold text-indigo-600 uppercase tracking-wider block">PIHAK KIRI (Mengetahui / Kepala Sekolah)</span>
-                
+            <div className="p-4 bg-slate-50/50 rounded-xl border border-slate-200 space-y-3.5">
+              <span className="text-[10px] font-bold text-indigo-600 uppercase tracking-wider block">Kepala Sekolah (Pihak Penandatangan Tunggal)</span>
+              
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">Jabatan Penandatangan</label>
                   <input
@@ -247,7 +251,7 @@ export default function SchoolProfileEditor({ profile, onUpdateProfile }: School
                 </div>
 
                 <div>
-                  <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">Nama Kepala Sekolah / Pihak Kiri</label>
+                  <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">Nama Kepala Sekolah</label>
                   <input
                     type="text"
                     value={signeeNameLeft}
@@ -259,7 +263,7 @@ export default function SchoolProfileEditor({ profile, onUpdateProfile }: School
                 </div>
 
                 <div>
-                  <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">NIP Kepala Sekolah / Pihak Kiri</label>
+                  <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">NIP Kepala Sekolah</label>
                   <input
                     type="text"
                     value={signeeNipLeft}
@@ -269,42 +273,56 @@ export default function SchoolProfileEditor({ profile, onUpdateProfile }: School
                   />
                 </div>
               </div>
+            </div>
+          </div>
 
-              {/* Right Signee (Head of Admin) */}
-              <div className="space-y-3.5 p-4 bg-slate-50/50 rounded-xl border border-slate-200">
-                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">PIHAK KANAN (Pembuat Laporan / Tata Usaha)</span>
-                
-                <div>
-                  <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">Jabatan Penandatangan</label>
+          {/* Section 3: Akun Administrator */}
+          <div className="bg-white p-6 rounded-2xl border border-slate-200 space-y-4" id="section-admin-account">
+            <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-2 border-b border-slate-100 pb-3">
+              <Shield className="w-4 h-4 text-indigo-600" />
+              Pengaturan Akun Pemilik Kehadiran
+            </h3>
+            <p className="text-[11px] text-slate-500 font-medium">Ubah nama pengguna admin (username) dan kata sandi pemilik akun untuk mengamankan akses sistem kehadiran ini.</p>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Username / Nama Admin Baru</label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <User className="w-3.5 h-3.5 text-slate-400" />
+                  </div>
                   <input
                     type="text"
-                    value={signeeTitleRight}
-                    onChange={(e) => setSigneeTitleRight(e.target.value)}
-                    className="w-full px-3 py-1.5 bg-white border border-slate-200 focus:border-indigo-600 rounded text-xs font-semibold outline-none"
-                    placeholder="Kepala Tata Usaha / Kepegawaian"
+                    value={adminUsername}
+                    onChange={(e) => setAdminUsername(e.target.value)}
+                    className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 focus:bg-white focus:border-indigo-600 rounded-lg text-xs font-bold outline-none transition"
+                    placeholder="MUSTHOLIH"
+                    required
                   />
                 </div>
+              </div>
 
-                <div>
-                  <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">Nama Tata Usaha / Pihak Kanan</label>
+              <div>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Password Admin Baru</label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <Lock className="w-3.5 h-3.5 text-slate-400" />
+                  </div>
                   <input
-                    type="text"
-                    value={signeeNameRight}
-                    onChange={(e) => setSigneeNameRight(e.target.value)}
-                    className="w-full px-3 py-1.5 bg-white border border-slate-200 focus:border-indigo-600 rounded text-xs font-bold outline-none"
-                    placeholder="Dra. Endang Lestari"
+                    type={showPassword ? 'text' : 'password'}
+                    value={adminPassword}
+                    onChange={(e) => setAdminPassword(e.target.value)}
+                    className="w-full pl-9 pr-10 py-2 bg-slate-50 border border-slate-200 focus:bg-white focus:border-indigo-600 rounded-lg text-xs font-semibold font-mono outline-none transition text-slate-700"
+                    placeholder="Ketik password baru..."
+                    required
                   />
-                </div>
-
-                <div>
-                  <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">NIP Tata Usaha / Pihak Kanan</label>
-                  <input
-                    type="text"
-                    value={signeeNipRight}
-                    onChange={(e) => setSigneeNipRight(e.target.value)}
-                    className="w-full px-3 py-1.5 bg-white border border-slate-200 focus:border-indigo-600 rounded text-xs font-semibold outline-none font-mono"
-                    placeholder="197205151999082001"
-                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 cursor-pointer text-slate-400 hover:text-slate-600"
+                  >
+                    {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                  </button>
                 </div>
               </div>
             </div>
