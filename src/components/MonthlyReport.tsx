@@ -77,7 +77,28 @@ export default function MonthlyReport({ teachers, records }: MonthlyReportProps)
 
   // Filter out active teachers for the report
   const activeTeachers = useMemo(() => {
-    return teachers.filter(t => t.status === 'aktif');
+    const list = teachers.filter(t => t.status === 'aktif');
+    return [...list].sort((a, b) => {
+      const hasNipA = !!(a.nip && a.nip.trim().length > 0);
+      const hasNipB = !!(b.nip && b.nip.trim().length > 0);
+      
+      if (hasNipA && !hasNipB) return -1;
+      if (!hasNipA && hasNipB) return 1;
+      
+      const getPriority = (sub: string) => {
+        const s = (sub || '').toLowerCase();
+        if (s.includes('bk') || s.includes('bimbingan')) return 2;
+        if (s.includes('tenaga') || s.includes('kependidikan') || s.includes('staf') || s.includes('tu') || s.includes('administrasi')) return 3;
+        return 1; // Guru Mapel / Default
+      };
+      
+      const prioA = getPriority(a.subject);
+      const prioB = getPriority(b.subject);
+      
+      if (prioA !== prioB) return prioA - prioB;
+      
+      return a.name.localeCompare(b.name);
+    });
   }, [teachers]);
 
   // Generate unique years present in records + current year
@@ -219,7 +240,7 @@ export default function MonthlyReport({ teachers, records }: MonthlyReportProps)
       [`Bulan: ${monthName} ${selectedYear}`, '', '', '', '', '', '', '', '', ''],
       [`Madrasah: ${schoolName}`, '', '', '', '', '', '', '', '', ''],
       [],
-      ['No', 'Nama Guru', 'NIP', 'Mata Pelajaran', 'Hadir', 'Izin', 'Sakit', 'Alpa', 'Total Hari Kerja', 'Persentase Kehadiran (%)'],
+      ['No', 'Nama Guru', 'NIP', 'Tugas Utama', 'Hadir', 'Izin', 'Sakit', 'Alpa', 'Total Hari Kerja', 'Persentase Kehadiran (%)'],
       ...filteredStats.map((s, index) => [
         index + 1,
         s.teacherName,
@@ -686,7 +707,7 @@ export default function MonthlyReport({ teachers, records }: MonthlyReportProps)
                       <span className="text-xs font-bold text-slate-900">{selectedTeacherStats.teacherName}</span>
                     </div>
                     <div>
-                      <span className="text-slate-400 text-[10px] uppercase font-bold block">Mata Pelajaran</span>
+                      <span className="text-slate-400 text-[10px] uppercase font-bold block">Tugas Utama</span>
                       <span className="text-xs font-bold text-slate-900">{selectedTeacherStats.subject}</span>
                     </div>
                     <div>
@@ -736,7 +757,7 @@ export default function MonthlyReport({ teachers, records }: MonthlyReportProps)
                       <th className="border border-slate-300 px-3 py-2 text-center w-8">No</th>
                       <th className="border border-slate-300 px-3 py-2">Nama Guru</th>
                       <th className="border border-slate-300 px-3 py-2">NIP</th>
-                      <th className="border border-slate-300 px-3 py-2">Mata Pelajaran</th>
+                      <th className="border border-slate-300 px-3 py-2">Tugas Utama</th>
                       <th className="border border-slate-300 px-2 py-2 text-center">H</th>
                       <th className="border border-slate-300 px-2 py-2 text-center">I</th>
                       <th className="border border-slate-300 px-2 py-2 text-center">S</th>

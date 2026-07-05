@@ -28,6 +28,7 @@ import {
 interface TeacherManagementProps {
   teachers: Teacher[];
   onAddTeacher: (teacher: Omit<Teacher, 'id' | 'photoColor'>) => void;
+  onAddBulkTeachers?: (teachersList: Omit<Teacher, 'id' | 'photoColor'>[]) => void;
   onUpdateTeacher: (teacher: Teacher) => void;
   onDeleteTeacher: (id: string) => void;
 }
@@ -43,7 +44,7 @@ const PHOTO_COLORS = [
   'bg-orange-100 text-orange-700'
 ];
 
-export default function TeacherManagement({ teachers, onAddTeacher, onUpdateTeacher, onDeleteTeacher }: TeacherManagementProps) {
+export default function TeacherManagement({ teachers, onAddTeacher, onAddBulkTeachers, onUpdateTeacher, onDeleteTeacher }: TeacherManagementProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [subjectFilter, setSubjectFilter] = useState('Semua');
   const [statusFilter, setStatusFilter] = useState('Semua');
@@ -69,6 +70,163 @@ export default function TeacherManagement({ teachers, onAddTeacher, onUpdateTeac
   const [selectedTeacherForIdCard, setSelectedTeacherForIdCard] = useState<Teacher | null>(null);
   const [cardQrUrl, setCardQrUrl] = useState('');
   const [schoolProfile, setSchoolProfile] = useState<any>(null);
+
+  // --- Bulk Excel Import States ---
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [importPasteText, setImportPasteText] = useState('');
+  const [importParsedData, setImportParsedData] = useState<any[]>([]);
+  const [importError, setImportError] = useState('');
+
+  // --- Custom QR Code States ---
+  const [selectedTeacherForCustomQr, setSelectedTeacherForCustomQr] = useState<Teacher | null>(null);
+  const [customQrUrl, setCustomQrUrl] = useState('');
+  const [qrSize, setQrSize] = useState<number>(240);
+  const [qrBgColor, setQrBgColor] = useState<string>('#ffffff');
+  const [qrTextColor, setQrTextColor] = useState<string>('#0f172a');
+  const [qrBorderColor, setQrBorderColor] = useState<string>('#475569');
+  const [qrBorderStyle, setQrBorderStyle] = useState<'solid' | 'dashed' | 'double' | 'dotted' | 'none'>('solid');
+  const [qrBorderWidth, setQrBorderWidth] = useState<number>(4);
+  const [qrShowName, setQrShowName] = useState<boolean>(true);
+  const [qrShowNip, setQrShowNip] = useState<boolean>(true);
+  const [qrShowSubject, setQrShowSubject] = useState<boolean>(true);
+  const [qrCustomTitle, setQrCustomTitle] = useState<string>('KARTU ABSENSI PRESENSI GURU');
+
+  // Generate Custom QR Code url on selection
+  useEffect(() => {
+    if (selectedTeacherForCustomQr) {
+      const payload = JSON.stringify({
+        id: selectedTeacherForCustomQr.id,
+        nip: selectedTeacherForCustomQr.nip,
+        name: selectedTeacherForCustomQr.name
+      });
+      QRCode.toDataURL(payload, { margin: 1, scale: 10 })
+        .then(url => setCustomQrUrl(url))
+        .catch(err => console.error('Error generating custom QR', err));
+    } else {
+      setCustomQrUrl('');
+    }
+  }, [selectedTeacherForCustomQr]);
+
+  // Handle parsing spreadsheet clipboard text or CSV content
+  const handleParseImport = (text: string) => {
+    setImportError('');
+    if (!text.trim()) {
+      setImportError('Data kosong. Silakan tempelkan data atau pilih file.');
+      return;
+    }
+
+    const lines = text.trim().split('\n');
+    const tempRows: any[] = [];
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) continue;
+
+      let cells: string[] = [];
+      if (line.includes('\t')) {
+        cells = line.split('\t');
+      } else if (line.includes(';')) {
+        cells = line.split(';');
+      } else {
+        cells = line.split(',');
+      }
+
+      cells = cells.map(c => c.replace(/^["']|["']$/g, '').trim());
+
+      // Skip header row if it resembles headers
+      if (i === 0 && (
+        line.toLowerCase().includes('nama') || 
+        line.toLowerCase().includes('nip') || 
+        line.toLowerCase().includes('subject') || 
+        line.toLowerCase().includes('pelajaran') ||
+        line.toLowerCase().includes('kontak')
+      )) {
+        continue;
+      }
+
+      let rowNip = '';
+      let rowName = '';
+      let rowSubject = '';
+      let rowContact = '';
+
+      if (cells.length >= 4) {
+        rowNip = cells[0];
+        rowName = cells[1];
+        rowSubject = cells[2];
+        rowContact = cells[3];
+      } else if (cells.length === 3) {
+        rowName = cells[0];
+        rowSubject = cells[1];
+        rowContact = cells[2];
+      } else if (cells.length === 2) {
+        rowName = cells[0];
+        rowSubject = cells[1];
+      } else if (cells.length === 1) {
+        rowName = cells[0];
+      }
+
+      // We only insert if the rowName is not empty
+      if (rowName) {
+        tempRows.push({
+          nip: rowNip,
+          name: rowName,
+          subject: rowSubject || 'Umum',
+          contact: rowContact || '08123456789'
+        });
+      }
+    }
+
+    if (tempRows.length === 0) {
+      setImportError('Format data tidak sesuai atau kolom nama tidak ditemukan.');
+    } else {
+      setImportParsedData(tempRows);
+    }
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const text = event.target?.result as string;
+      setImportPasteText(text);
+      handleParseImport(text);
+    };
+    reader.readAsText(file);
+  };
+
+  const handleExecuteImport = () => {
+    if (importParsedData.length === 0) return;
+    
+    if (onAddBulkTeachers) {
+      const items = importParsedData.map(row => ({
+        nip: row.nip,
+        name: row.name,
+        subject: row.subject,
+        contact: row.contact,
+        status: 'aktif' as const,
+        photo: ''
+      }));
+      onAddBulkTeachers(items);
+    } else {
+      importParsedData.forEach(row => {
+        onAddTeacher({
+          nip: row.nip,
+          name: row.name,
+          subject: row.subject,
+          contact: row.contact,
+          status: 'aktif',
+          photo: ''
+        });
+      });
+    }
+
+    setIsImportModalOpen(false);
+    setImportPasteText('');
+    setImportParsedData([]);
+    setImportError('');
+  };
 
   // Load school profile details for the ID card
   useEffect(() => {
@@ -107,13 +265,35 @@ export default function TeacherManagement({ teachers, onAddTeacher, onUpdateTeac
 
   // Filter teachers based on search query, subject, and status
   const filteredTeachers = useMemo(() => {
-    return teachers.filter(t => {
+    const list = teachers.filter(t => {
       const matchesSearch = t.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
                             t.nip.includes(searchQuery);
       const matchesSubject = subjectFilter === 'Semua' || t.subject === subjectFilter;
       const matchesStatus = statusFilter === 'Semua' || t.status === statusFilter;
       
       return matchesSearch && matchesSubject && matchesStatus;
+    });
+
+    return [...list].sort((a, b) => {
+      const hasNipA = !!(a.nip && a.nip.trim().length > 0);
+      const hasNipB = !!(b.nip && b.nip.trim().length > 0);
+      
+      if (hasNipA && !hasNipB) return -1;
+      if (!hasNipA && hasNipB) return 1;
+      
+      const getPriority = (sub: string) => {
+        const s = (sub || '').toLowerCase();
+        if (s.includes('bk') || s.includes('bimbingan')) return 2;
+        if (s.includes('tenaga') || s.includes('kependidikan') || s.includes('staf') || s.includes('tu') || s.includes('administrasi')) return 3;
+        return 1; // Guru Mapel / Default
+      };
+      
+      const prioA = getPriority(a.subject);
+      const prioB = getPriority(b.subject);
+      
+      if (prioA !== prioB) return prioA - prioB;
+      
+      return a.name.localeCompare(b.name);
     });
   }, [teachers, searchQuery, subjectFilter, statusFilter]);
 
@@ -151,7 +331,7 @@ export default function TeacherManagement({ teachers, onAddTeacher, onUpdateTeac
       return;
     }
     if (!subject.trim()) {
-      setFormError('Mata pelajaran wajib diisi.');
+      setFormError('Tugas utama wajib diisi.');
       return;
     }
     if (!contact.trim()) {
@@ -224,16 +404,26 @@ export default function TeacherManagement({ teachers, onAddTeacher, onUpdateTeac
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4" id="teacher-mgmt-header">
         <div>
           <h2 className="text-base font-bold text-slate-800 tracking-tight uppercase">MANAJEMEN DATA GURU</h2>
-          <p className="text-xs text-slate-500 mt-1.5 font-medium">Kelola data induk pendidik, mata pelajaran, dan informasi kontak.</p>
+          <p className="text-xs text-slate-500 mt-1.5 font-medium">Kelola data induk pendidik, tugas utama, dan informasi kontak.</p>
         </div>
-        <button
-          id="btn-tambah-guru"
-          onClick={openAddModal}
-          className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-lg transition uppercase tracking-wider cursor-pointer flex items-center gap-2 self-start sm:self-auto"
-        >
-          <UserPlus className="w-4 h-4" />
-          Tambah Guru Baru
-        </button>
+        <div className="flex flex-wrap gap-2 self-start sm:self-auto">
+          <button
+            id="btn-import-guru"
+            onClick={() => setIsImportModalOpen(true)}
+            className="px-4 py-2.5 bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs rounded-lg transition uppercase tracking-wider cursor-pointer flex items-center gap-2"
+          >
+            <Upload className="w-4 h-4" />
+            Import Excel / CSV
+          </button>
+          <button
+            id="btn-tambah-guru"
+            onClick={openAddModal}
+            className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-lg transition uppercase tracking-wider cursor-pointer flex items-center gap-2"
+          >
+            <UserPlus className="w-4 h-4" />
+            Tambah Guru Baru
+          </button>
+        </div>
       </div>
 
       {/* Filters & Search Toolbar - Sleek and structured border layout */}
@@ -267,7 +457,7 @@ export default function TeacherManagement({ teachers, onAddTeacher, onUpdateTeac
               className="appearance-none pl-3 pr-8 py-2 bg-slate-50 border border-slate-200 rounded-lg text-[11px] font-bold text-slate-600 outline-none hover:bg-slate-100 transition cursor-pointer"
             >
               {subjectsList.map((subj) => (
-                <option key={subj} value={subj}>{subj === 'Semua' ? 'Mata Pelajaran: Semua' : subj}</option>
+                <option key={subj} value={subj}>{subj === 'Semua' ? 'Tugas Utama: Semua' : subj}</option>
               ))}
             </select>
             <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-2.5 pointer-events-none" />
@@ -299,7 +489,7 @@ export default function TeacherManagement({ teachers, onAddTeacher, onUpdateTeac
                 <tr className="border-b border-slate-200 bg-slate-50 text-slate-400 text-[10px] font-bold uppercase tracking-wider">
                   <th className="px-6 py-4">Guru</th>
                   <th className="px-6 py-4">NIP</th>
-                  <th className="px-6 py-4">Mata Pelajaran</th>
+                  <th className="px-6 py-4">Tugas Utama</th>
                   <th className="px-6 py-4">Hubungi / Kontak</th>
                   <th className="px-6 py-4">Status</th>
                   <th className="px-6 py-4 text-right">Aksi</th>
@@ -373,9 +563,17 @@ export default function TeacherManagement({ teachers, onAddTeacher, onUpdateTeac
                             id={`btn-id-card-${teacher.id}`}
                             onClick={() => setSelectedTeacherForIdCard(teacher)}
                             className="p-1.5 text-slate-400 hover:text-emerald-600 rounded hover:bg-slate-100 transition cursor-pointer"
-                            title="Cetak Kartu KTP Guru"
+                            title="Cetak ID Card KTP"
                           >
                             <QrCode className="w-4 h-4" />
+                          </button>
+                          <button
+                            id={`btn-custom-qr-${teacher.id}`}
+                            onClick={() => setSelectedTeacherForCustomQr(teacher)}
+                            className="p-1.5 text-slate-400 hover:text-indigo-600 rounded hover:bg-slate-100 transition cursor-pointer"
+                            title="Cetak QR Code Besar & Custom"
+                          >
+                            <Printer className="w-4 h-4" />
                           </button>
                           <button
                             id={`btn-edit-${teacher.id}`}
@@ -465,11 +663,11 @@ export default function TeacherManagement({ teachers, onAddTeacher, onUpdateTeac
 
               {/* Subject Field */}
               <div>
-                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Mata Pelajaran Utama</label>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Tugas Utama</label>
                 <input
                   id="modal-teacher-subject"
                   type="text"
-                  placeholder="Contoh: Informatika, Matematika, Kimia"
+                  placeholder="Contoh: Guru Mapel, Guru BK, Tenaga Kependidikan"
                   value={subject}
                   onChange={(e) => setSubject(e.target.value)}
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-200 focus:bg-white focus:border-indigo-600 focus:ring-1 focus:ring-indigo-600 rounded-lg text-xs font-semibold transition outline-none text-slate-700"
@@ -707,7 +905,7 @@ export default function TeacherManagement({ teachers, onAddTeacher, onUpdateTeac
                       </span>
                     </div>
                     <div>
-                      <span className="text-[5px] font-bold text-indigo-300 block leading-none uppercase tracking-wider">MATA PELAJARAN:</span>
+                      <span className="text-[5px] font-bold text-indigo-300 block leading-none uppercase tracking-wider">TUGAS UTAMA:</span>
                       <span className="text-[7.5px] font-bold text-slate-300 leading-none truncate block">
                         {selectedTeacherForIdCard.subject}
                       </span>
@@ -765,7 +963,474 @@ export default function TeacherManagement({ teachers, onAddTeacher, onUpdateTeac
         </div>
       )}
 
-      {/* Styled Tag injection specifically for ID Card full screen print mode */}
+      {/* 5. Bulk Excel / CSV Import Modal */}
+      {isImportModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in" id="import-excel-modal">
+          <div className="bg-white rounded-2xl shadow-xl border border-slate-200 max-w-2xl w-full overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="p-5 border-b border-slate-200 flex items-center justify-between bg-slate-50/50">
+              <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                <Upload className="w-4 h-4 text-slate-800 animate-bounce" />
+                Import Guru Massal dari Excel / CSV
+              </h3>
+              <button 
+                onClick={() => {
+                  setIsImportModalOpen(false);
+                  setImportPasteText('');
+                  setImportParsedData([]);
+                  setImportError('');
+                }}
+                className="p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4 overflow-y-auto flex-1">
+              <div className="p-3 bg-indigo-50 border border-indigo-100 rounded-xl text-xs text-indigo-800 leading-normal">
+                <strong className="block mb-1">Panduan Penggunaan:</strong>
+                Anda dapat menyalin (Copy) kolom data guru dari Microsoft Excel, Google Sheets, atau WPS, lalu menempelkannya (Paste) langsung ke kotak di bawah ini. Aturan susunan kolom:
+                <ul className="list-disc pl-4 mt-1.5 space-y-1 font-semibold">
+                  <li>Kolom 1: NIP (Opsional, boleh kosong jika belum PNS/ASN)</li>
+                  <li>Kolom 2: Nama Guru (Wajib)</li>
+                  <li>Kolom 3: Tugas Utama (Wajib, contoh: Guru Mapel, Guru BK, Tenaga Kependidikan)</li>
+                  <li>Kolom 4: No HP / Kontak (Wajib, contoh: 0812345678)</li>
+                </ul>
+                <p className="mt-2 text-[10px] text-slate-500 italic">Sistem akan otomatis mengenali batas baris dan kolom tabulasi.</p>
+              </div>
+
+              {/* Upload & Area Selectors */}
+              <div className="grid grid-cols-2 gap-3" id="import-type-selectors">
+                <label className="border border-slate-200 hover:border-indigo-600 bg-slate-50 p-3 rounded-xl flex flex-col items-center justify-center cursor-pointer transition">
+                  <Upload className="w-5 h-5 text-indigo-600 mb-1" />
+                  <span className="text-[10px] font-bold text-slate-600 uppercase">Pilih File CSV</span>
+                  <input 
+                    type="file" 
+                    accept=".csv,.txt" 
+                    onChange={handleFileUpload} 
+                    className="hidden" 
+                  />
+                </label>
+                <div className="border border-indigo-600 bg-indigo-50/20 p-3 rounded-xl flex flex-col items-center justify-center">
+                  <span className="text-indigo-700 font-extrabold text-sm">📋 Copy Paste</span>
+                  <span className="text-[10px] font-semibold text-indigo-500 mt-1">Tempel langsung dari Excel</span>
+                </div>
+              </div>
+
+              {/* Textarea Input */}
+              <div className="space-y-1.5">
+                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Tempel Data Tabel Excel Di Sini</label>
+                <textarea
+                  placeholder="Contoh:&#10;197206052003	Ahmad Dahlan, S.Pd.	Fisika	081234567890&#10;198103122005	Siti Aminah, M.Pd.	Bahasa Inggris	085298765432"
+                  rows={5}
+                  value={importPasteText}
+                  onChange={(e) => {
+                    setImportPasteText(e.target.value);
+                    handleParseImport(e.target.value);
+                  }}
+                  className="w-full p-3 bg-slate-50 border border-slate-200 focus:bg-white focus:border-indigo-600 rounded-xl text-xs font-mono transition outline-none text-slate-800"
+                ></textarea>
+              </div>
+
+              {importError && (
+                <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700 font-bold flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 shrink-0" />
+                  <span>{importError}</span>
+                </div>
+              )}
+
+              {/* Parsed Data Preview Grid */}
+              {importParsedData.length > 0 && (
+                <div className="space-y-2">
+                  <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Pratinjau Data yang Terdeteksi ({importParsedData.length} Guru)</h4>
+                  <div className="border border-slate-200 rounded-xl overflow-hidden max-h-48 overflow-y-auto">
+                    <table className="w-full text-left text-xs">
+                      <thead>
+                        <tr className="bg-slate-50 border-b border-slate-200 text-slate-400 text-[9px] font-bold uppercase tracking-wider">
+                          <th className="px-3 py-2">NIP</th>
+                          <th className="px-3 py-2">Nama Lengkap</th>
+                          <th className="px-3 py-2">Tugas Utama</th>
+                          <th className="px-3 py-2">Kontak</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
+                        {importParsedData.map((row, idx) => (
+                          <tr key={idx} className="hover:bg-slate-50/50">
+                            <td className="px-3 py-2 font-mono text-slate-500">{row.nip || '-'}</td>
+                            <td className="px-3 py-2 text-slate-800 font-bold">{row.name}</td>
+                            <td className="px-3 py-2">
+                              <span className="px-1.5 py-0.5 bg-slate-100 text-slate-600 rounded text-[9px]">
+                                {row.subject}
+                              </span>
+                            </td>
+                            <td className="px-3 py-2 text-slate-600 font-mono text-[10px]">{row.contact}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="p-4 bg-slate-50 border-t border-slate-200 flex justify-end gap-2">
+              <button
+                onClick={() => {
+                  setIsImportModalOpen(false);
+                  setImportPasteText('');
+                  setImportParsedData([]);
+                  setImportError('');
+                }}
+                className="px-4 py-2 bg-white border border-slate-200 hover:bg-slate-100 text-slate-600 font-bold text-xs rounded-lg transition cursor-pointer"
+              >
+                Batal
+              </button>
+              <button
+                onClick={handleExecuteImport}
+                disabled={importParsedData.length === 0}
+                className={`px-4 py-2 text-white font-bold text-xs rounded-lg transition uppercase tracking-wider cursor-pointer flex items-center gap-1.5 ${
+                  importParsedData.length > 0 
+                    ? 'bg-indigo-600 hover:bg-indigo-700' 
+                    : 'bg-slate-300 cursor-not-allowed'
+                }`}
+              >
+                <UserCheck className="w-4 h-4" />
+                Simpan &amp; Import Massal
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 6. Cetak QR Code Custom Mandiri Modal */}
+      {selectedTeacherForCustomQr && (
+        <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4 z-50 overflow-y-auto print:bg-white print:p-0 print:overflow-visible print:relative" id="custom-qr-modal">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full border border-slate-200 overflow-hidden flex flex-col md:flex-row print:shadow-none print:border-none print:max-w-none print:w-auto">
+            {/* Left Side: Customization panel (Hidden on print) */}
+            <div className="p-6 border-r border-slate-200 flex-1 space-y-4 print:hidden bg-slate-50 overflow-y-auto max-h-[90vh] md:max-h-none md:w-80 shrink-0">
+              <div className="flex items-center justify-between pb-2 border-b border-slate-200">
+                <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Customizer QR Code</h3>
+                <span className="text-[9px] bg-indigo-100 text-indigo-700 font-bold px-1.5 py-0.5 rounded uppercase">MANDIRI</span>
+              </div>
+
+              {/* Title Input */}
+              <div className="space-y-1">
+                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Judul Kartu</label>
+                <input
+                  type="text"
+                  value={qrCustomTitle}
+                  onChange={(e) => setQrCustomTitle(e.target.value)}
+                  className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-semibold outline-none focus:border-indigo-600"
+                />
+              </div>
+
+              {/* QR Size Slider */}
+              <div className="space-y-1">
+                <div className="flex justify-between items-center">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Ukuran QR Code ({qrSize}px)</label>
+                  <span className="text-[10px] font-mono font-bold text-slate-500">{qrSize} px</span>
+                </div>
+                <input
+                  type="range"
+                  min="120"
+                  max="400"
+                  value={qrSize}
+                  onChange={(e) => setQrSize(Number(e.target.value))}
+                  className="w-full h-1 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
+                />
+              </div>
+
+              {/* Style options: Background, Text, Border */}
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Warna Kartu</label>
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="color"
+                      value={qrBgColor}
+                      onChange={(e) => setQrBgColor(e.target.value)}
+                      className="w-7 h-7 p-0 rounded-md border border-slate-300 cursor-pointer overflow-hidden"
+                    />
+                    <input
+                      type="text"
+                      value={qrBgColor}
+                      onChange={(e) => setQrBgColor(e.target.value)}
+                      className="w-full px-1.5 py-1 text-[10px] font-mono border border-slate-200 rounded-md uppercase"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Warna Teks</label>
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="color"
+                      value={qrTextColor}
+                      onChange={(e) => setQrTextColor(e.target.value)}
+                      className="w-7 h-7 p-0 rounded-md border border-slate-300 cursor-pointer overflow-hidden"
+                    />
+                    <input
+                      type="text"
+                      value={qrTextColor}
+                      onChange={(e) => setQrTextColor(e.target.value)}
+                      className="w-full px-1.5 py-1 text-[10px] font-mono border border-slate-200 rounded-md uppercase"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Border Color and Width */}
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Warna Bingkai</label>
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="color"
+                      value={qrBorderColor}
+                      onChange={(e) => setQrBorderColor(e.target.value)}
+                      className="w-7 h-7 p-0 rounded-md border border-slate-300 cursor-pointer overflow-hidden"
+                    />
+                    <input
+                      type="text"
+                      value={qrBorderColor}
+                      onChange={(e) => setQrBorderColor(e.target.value)}
+                      className="w-full px-1.5 py-1 text-[10px] font-mono border border-slate-200 rounded-md uppercase"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Ketebalan Bingkai</label>
+                  <select
+                    value={qrBorderWidth}
+                    onChange={(e) => setQrBorderWidth(Number(e.target.value))}
+                    className="w-full px-1.5 py-1.5 bg-white border border-slate-200 rounded-md text-[11px] font-bold text-slate-600 outline-none cursor-pointer"
+                  >
+                    <option value="0">Tanpa Bingkai</option>
+                    <option value="2">Tipis (2px)</option>
+                    <option value="4">Sedang (4px)</option>
+                    <option value="8">Tebal (8px)</option>
+                    <option value="12">Sangat Tebal (12px)</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Border Style */}
+              <div className="space-y-1">
+                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Gaya Bingkai</label>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {(['solid', 'dashed', 'double', 'dotted', 'none'] as const).map((style) => (
+                    <button
+                      key={style}
+                      type="button"
+                      onClick={() => setQrBorderStyle(style)}
+                      className={`px-2 py-1.5 text-[9px] font-extrabold uppercase border rounded-lg transition cursor-pointer ${
+                        qrBorderStyle === style 
+                          ? 'bg-indigo-600 border-indigo-600 text-white shadow-xs' 
+                          : 'bg-white border-slate-200 hover:bg-slate-50 text-slate-600'
+                      }`}
+                    >
+                      {style}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Show Hide toggles */}
+              <div className="space-y-2 pt-2 border-t border-slate-200">
+                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Tampilkan Informasi</label>
+                
+                <label className="flex items-center gap-2 text-xs font-bold text-slate-600 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={qrShowName}
+                    onChange={(e) => setQrShowName(e.target.checked)}
+                    className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 w-3.5 h-3.5"
+                  />
+                  <span>Nama Guru</span>
+                </label>
+
+                <label className="flex items-center gap-2 text-xs font-bold text-slate-600 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={qrShowNip}
+                    onChange={(e) => setQrShowNip(e.target.checked)}
+                    className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 w-3.5 h-3.5"
+                  />
+                  <span>NIP Guru</span>
+                </label>
+
+                <label className="flex items-center gap-2 text-xs font-bold text-slate-600 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={qrShowSubject}
+                    onChange={(e) => setQrShowSubject(e.target.checked)}
+                    className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 w-3.5 h-3.5"
+                  />
+                  <span>Tugas Utama</span>
+                </label>
+              </div>
+
+              {/* Quick Themes */}
+              <div className="space-y-1.5 pt-2 border-t border-slate-200">
+                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Tema Instan</label>
+                <div className="grid grid-cols-2 gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setQrBgColor('#ffffff');
+                      setQrTextColor('#0f172a');
+                      setQrBorderColor('#475569');
+                      setQrBorderStyle('solid');
+                    }}
+                    className="p-1 text-[9px] font-bold bg-white border border-slate-200 rounded hover:bg-slate-50 text-slate-700 cursor-pointer"
+                  >
+                    Minimalis Putih
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setQrBgColor('#0f172a');
+                      setQrTextColor('#ffffff');
+                      setQrBorderColor('#6366f1');
+                      setQrBorderStyle('double');
+                    }}
+                    className="p-1 text-[9px] font-bold bg-slate-900 border border-slate-800 rounded hover:bg-slate-800 text-indigo-300 cursor-pointer"
+                  >
+                    Neon Dark
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setQrBgColor('#ecfdf5');
+                      setQrTextColor('#065f46');
+                      setQrBorderColor('#059669');
+                      setQrBorderStyle('dashed');
+                    }}
+                    className="p-1 text-[9px] font-bold bg-emerald-50 border border-emerald-200 rounded hover:bg-emerald-100 text-emerald-800 cursor-pointer"
+                  >
+                    Madrasah Hijau
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setQrBgColor('#fffbeb');
+                      setQrTextColor('#78350f');
+                      setQrBorderColor('#d97706');
+                      setQrBorderStyle('solid');
+                    }}
+                    className="p-1 text-[9px] font-bold bg-amber-50 border border-amber-200 rounded hover:bg-amber-100 text-amber-800 cursor-pointer"
+                  >
+                    Retro Gold
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Right Side: Printable Display Area & Controls */}
+            <div className="flex-1 flex flex-col min-h-[50vh] md:min-h-0 bg-slate-100/60 p-6 items-center justify-center print:bg-white print:p-0">
+              {/* Toolbar Top for modal (Hidden on print) */}
+              <div className="w-full flex justify-between items-center mb-6 print:hidden">
+                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Preview Cetak QR Code</span>
+                <button
+                  onClick={() => setSelectedTeacherForCustomQr(null)}
+                  className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-200/50 transition cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* The Printable QR Frame container */}
+              <div
+                id="printable-custom-qr-area"
+                className="transition-all duration-300 flex flex-col items-center justify-center p-8 rounded-3xl select-none"
+                style={{
+                  backgroundColor: qrBgColor,
+                  color: qrTextColor,
+                  borderWidth: qrBorderStyle !== 'none' ? `${qrBorderWidth}px` : '0px',
+                  borderColor: qrBorderColor,
+                  borderStyle: qrBorderStyle,
+                  width: '100%',
+                  maxWidth: '450px',
+                  boxShadow: '0 10px 25px -5px rgba(0,0,0,0.1)'
+                }}
+              >
+                {/* School or custom title */}
+                {qrCustomTitle && (
+                  <h4 className="text-xs font-black uppercase tracking-widest text-center mb-4 opacity-90 leading-relaxed max-w-[280px]">
+                    {qrCustomTitle}
+                  </h4>
+                )}
+
+                {/* QR Code image element */}
+                <div 
+                  className="bg-white p-4 rounded-2xl flex items-center justify-center shadow-inner border border-slate-200/60 animate-fade-in"
+                  style={{ width: `${qrSize}px`, height: `${qrSize}px` }}
+                >
+                  {customQrUrl ? (
+                    <img
+                      src={customQrUrl}
+                      alt="Custom Teacher QR"
+                      className="w-full h-full object-contain"
+                    />
+                  ) : (
+                    <div className="w-6 h-6 border-2 border-slate-300 border-t-indigo-600 rounded-full animate-spin"></div>
+                  )}
+                </div>
+
+                {/* Teacher name & detail displays */}
+                {(qrShowName || qrShowNip || qrShowSubject) && (
+                  <div className="mt-5 text-center space-y-1.5 w-full">
+                    {qrShowName && (
+                      <h3 className="text-base font-extrabold tracking-tight leading-tight uppercase">
+                        {selectedTeacherForCustomQr.name}
+                      </h3>
+                    )}
+                    {qrShowNip && selectedTeacherForCustomQr.nip && (
+                      <span className="text-xs font-mono font-bold opacity-80 block tracking-wider">
+                        NIP. {selectedTeacherForCustomQr.nip}
+                      </span>
+                    )}
+                    {qrShowSubject && (
+                      <span className="text-[10px] font-extrabold uppercase tracking-widest opacity-75 inline-block bg-black/5 px-2 py-0.5 rounded-md mt-1 font-sans">
+                        Tugas Utama: {selectedTeacherForCustomQr.subject}
+                      </span>
+                    )}
+                  </div>
+                )}
+
+                {/* Branding footer */}
+                <div className="mt-6 pt-3 border-t border-current/15 text-[8px] font-extrabold opacity-60 uppercase tracking-widest text-center w-full">
+                  {schoolProfile?.schoolName || 'MTsS MIFTAHUL HUDA'}
+                </div>
+              </div>
+
+              {/* Instruction block */}
+              <div className="p-3 bg-indigo-50 border border-indigo-100 rounded-xl text-[11px] text-indigo-800 font-medium leading-normal w-full max-w-md mt-6 print:hidden">
+                <strong>Saran Cetak:</strong> Tempel di meja kelas, gantung sebagai name tag, atau laminasi kertas tebal agar awet. Kode QR kompatibel penuh dengan alat pemindai lobby utama.
+              </div>
+
+              {/* Action buttons (Hidden on print) */}
+              <div className="mt-6 flex justify-end gap-2 w-full max-w-md print:hidden">
+                <button
+                  onClick={() => setSelectedTeacherForCustomQr(null)}
+                  className="px-4 py-2 bg-white border border-slate-200 hover:bg-slate-100 text-slate-600 font-bold text-xs rounded-lg transition cursor-pointer"
+                >
+                  Tutup
+                </button>
+                <button
+                  onClick={() => window.print()}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-lg transition uppercase tracking-wider cursor-pointer flex items-center gap-1.5 shadow-sm"
+                >
+                  <Printer className="w-4 h-4" />
+                  Cetak QR Code
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Styled Tag injection specifically for ID Card and QR Card full screen print mode */}
       <style>{`
         @media print {
           @page {
@@ -780,6 +1445,8 @@ export default function TeacherManagement({ teachers, onAddTeacher, onUpdateTeac
           body * {
             visibility: hidden;
           }
+          
+          /* Show Standard ID Card Print elements */
           #id-card-modal, #printable-id-card-area, #printable-id-card-area * {
             visibility: visible;
           }
@@ -811,8 +1478,37 @@ export default function TeacherManagement({ teachers, onAddTeacher, onUpdateTeac
             transform-origin: center !important;
             box-sizing: border-box !important;
           }
-          /* Ensure all child elements are adjusted correctly for color output */
           #printable-id-card-area * {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+
+          /* Show Custom QR Print elements */
+          #custom-qr-modal, #printable-custom-qr-area, #printable-custom-qr-area * {
+            visibility: visible;
+          }
+          #custom-qr-modal {
+            position: fixed !important;
+            left: 0 !important;
+            top: 0 !important;
+            width: 100% !important;
+            height: 100% !important;
+            background: white !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            z-index: 99999 !important;
+            overflow: visible !important;
+          }
+          #printable-custom-qr-area {
+            box-shadow: none !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            transform: scale(1.2) !important;
+            transform-origin: center !important;
+            box-sizing: border-box !important;
+          }
+          #printable-custom-qr-area * {
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
           }

@@ -50,7 +50,28 @@ export default function DailyAttendance({
 
   // Active (employed) teachers
   const activeTeachers = useMemo(() => {
-    return teachers.filter(t => t.status === 'aktif');
+    const list = teachers.filter(t => t.status === 'aktif');
+    return [...list].sort((a, b) => {
+      const hasNipA = !!(a.nip && a.nip.trim().length > 0);
+      const hasNipB = !!(b.nip && b.nip.trim().length > 0);
+      
+      if (hasNipA && !hasNipB) return -1;
+      if (!hasNipA && hasNipB) return 1;
+      
+      const getPriority = (sub: string) => {
+        const s = (sub || '').toLowerCase();
+        if (s.includes('bk') || s.includes('bimbingan')) return 2;
+        if (s.includes('tenaga') || s.includes('kependidikan') || s.includes('staf') || s.includes('tu') || s.includes('administrasi')) return 3;
+        return 1; // Guru Mapel / Default
+      };
+      
+      const prioA = getPriority(a.subject);
+      const prioB = getPriority(b.subject);
+      
+      if (prioA !== prioB) return prioA - prioB;
+      
+      return a.name.localeCompare(b.name);
+    });
   }, [teachers]);
 
   // Attendance records for the selected date

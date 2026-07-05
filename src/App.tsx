@@ -167,6 +167,34 @@ export default function App() {
     triggerToast(`Berhasil menambahkan guru: ${newTeacher.name}`);
   };
 
+  // Add bulk teachers handler
+  const handleAddBulkTeachers = (teachersDataList: Omit<Teacher, 'id' | 'photoColor'>[]) => {
+    const colors = [
+      'bg-indigo-100 text-indigo-700',
+      'bg-emerald-100 text-emerald-700',
+      'bg-amber-100 text-amber-700',
+      'bg-rose-100 text-rose-700',
+      'bg-sky-100 text-sky-700',
+      'bg-teal-100 text-teal-700',
+      'bg-purple-100 text-purple-700',
+      'bg-orange-100 text-orange-700'
+    ];
+
+    const newTeachersList = teachersDataList.map((t, index) => {
+      const randomColor = colors[Math.floor(Math.random() * colors.length)];
+      return {
+        ...t,
+        id: `t_${Date.now()}_${index}_${Math.random().toString(36).substring(2, 7)}`,
+        photoColor: randomColor
+      } as Teacher;
+    });
+
+    const updated = [...teachers, ...newTeachersList];
+    setTeachers(updated);
+    localStorage.setItem('teachers_data', JSON.stringify(updated));
+    triggerToast(`Berhasil menambahkan ${newTeachersList.length} guru secara massal`);
+  };
+
   // Update teacher profiles
   const handleUpdateTeacher = (updatedTeacher: Teacher) => {
     const updated = teachers.map(t => t.id === updatedTeacher.id ? updatedTeacher : t);
@@ -411,7 +439,7 @@ export default function App() {
         <div className="p-6 border-t border-slate-200 space-y-4" id="sidebar-footer">
           <div className="bg-slate-900 rounded-xl p-4 text-white shadow-xs" id="admin-profile-badge">
             <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block mb-1">USER AKTIF</span>
-            <p className="text-xs font-bold truncate">mus9484@gmail.com</p>
+            <p className="text-xs font-bold truncate">miftahulhuda97@gmail.com</p>
             <p className="text-[10px] text-indigo-300 mt-0.5">Administrator Sistem</p>
           </div>
 
@@ -526,7 +554,7 @@ export default function App() {
             <div className="space-y-4">
               <div className="bg-slate-900 rounded-xl p-4 text-white shadow-xs">
                 <p className="text-[10px] opacity-70 mb-1 font-medium">USER AKTIF</p>
-                <p className="text-xs font-bold truncate">mus9484@gmail.com</p>
+                <p className="text-xs font-bold truncate">miftahulhuda97@gmail.com</p>
                 <p className="text-[10px] text-indigo-300 mt-0.5">Administrator Sistem</p>
               </div>
 
@@ -587,6 +615,7 @@ export default function App() {
             <TeacherManagement
               teachers={teachers}
               onAddTeacher={handleAddTeacher}
+              onAddBulkTeachers={handleAddBulkTeachers}
               onUpdateTeacher={handleUpdateTeacher}
               onDeleteTeacher={handleDeleteTeacher}
             />
