@@ -1,5 +1,5 @@
 {
-  "name": "Admin Absen Guru",
+  "name": "Absen Guru",
   "description": "Aplikasi manajemen data guru dan pencatatan absensi harian serta laporan bulanan untuk administrator sekolah.",
   "requestFramePermissions": ["camera"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
